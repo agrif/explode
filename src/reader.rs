@@ -64,7 +64,7 @@ where
 mod tests {
     use super::ExplodeReader;
     use crate::examples::EXAMPLES;
-    use std::io::{Cursor, Read};
+    use std::io::{Cursor, ErrorKind, Read};
 
     #[test]
     fn reader() {
@@ -86,6 +86,37 @@ mod tests {
                 ours.push(byte);
             }
             assert_eq!(*decoded, &ours[..]);
+        }
+    }
+
+    #[test]
+    fn reader_incomplete() {
+        for (encoded, decoded) in EXAMPLES {
+            let mut r = ExplodeReader::new(Cursor::new(
+                &encoded[..encoded.len() - 1],
+            ));
+            let mut ours = Vec::with_capacity(decoded.len());
+            match r.read_to_end(&mut ours) {
+                Err(e) => assert_eq!(e.kind(), ErrorKind::UnexpectedEof),
+                _ => panic!("incorrectly parsed incomplete input"),
+            }
+        }
+    }
+
+    #[test]
+    fn reader_extra() {
+        for (encoded, decoded) in EXAMPLES {
+            let mut encodedplus: Vec<u8> = encoded.iter().cloned().collect();
+            encodedplus.push(42);
+            let mut inner = Cursor::new(&encodedplus);
+            let mut r = ExplodeReader::new(&mut inner);
+            let mut ours = Vec::with_capacity(decoded.len());
+            r.read_to_end(&mut ours).unwrap();
+            assert_eq!(*decoded, &ours[..]);
+
+            ours.clear();
+            inner.read_to_end(&mut ours).unwrap();
+            assert_eq!(vec![42], ours);
         }
     }
 }

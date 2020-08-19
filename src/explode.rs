@@ -365,7 +365,7 @@ pub fn explode(data: &[u8]) -> Result<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{explode, explode_with_buffer};
+    use super::{explode, explode_with_buffer, Error};
     use crate::examples::EXAMPLES;
 
     #[test]
@@ -381,6 +381,27 @@ mod tests {
         let mut buf = [0; 1];
         for (encoded, decoded) in EXAMPLES {
             let ours = explode_with_buffer(encoded, &mut buf).unwrap();
+            assert_eq!(*decoded, &ours[..]);
+        }
+    }
+
+    #[test]
+    fn explode_incomplete() {
+        for (encoded, _) in EXAMPLES {
+            let ours = explode(&encoded[..encoded.len() - 1]);
+            match ours {
+                Err(Error::IncompleteInput) => (),
+                _ => panic!("incorrectly parsed incomplete input"),
+            }
+        }
+    }
+
+    #[test]
+    fn explode_extra() {
+        for (encoded, decoded) in EXAMPLES {
+            let mut encodedplus: Vec<u8> = encoded.iter().cloned().collect();
+            encodedplus.push(42);
+            let ours = explode(&encodedplus).unwrap();
             assert_eq!(*decoded, &ours[..]);
         }
     }
