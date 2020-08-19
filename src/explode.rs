@@ -1,18 +1,18 @@
-use super::codes::{DecodeResult, Decoder as HuffmanDecoder};
+use super::codes::{DecodeResult, Decoder};
 use super::{tables, Error, Result};
 
 use arraydeque::ArrayDeque;
 
 #[derive(Debug)]
-pub struct Decoder {
-    state: DecoderState<HuffmanDecoder<'static, &'static [u8]>>,
+pub struct Explode {
+    state: ExplodeState<Decoder<'static, &'static [u8]>>,
 
     // header info
     lit: Option<u8>,
     dict: Option<u8>,
 
     // input management
-    input: DecoderInput,
+    input: ExplodeInput,
 
     // store our window (which cannot exceed 4096 bytes)
     window: ArrayDeque<[u8; 4096], arraydeque::behavior::Wrapping>,
@@ -20,7 +20,7 @@ pub struct Decoder {
 
 // hold a byte until it's ready to use
 #[derive(Debug)]
-enum DecoderInputState {
+enum ExplodeInputState {
     Available(u8),
     Taken,
     Waiting,
@@ -28,17 +28,17 @@ enum DecoderInputState {
 
 // help manage the bitstream input
 #[derive(Debug)]
-struct DecoderInput {
-    next: DecoderInputState,
+struct ExplodeInput {
+    next: ExplodeInputState,
 
     // store unused bits read in
     bitbuf: u32,
     bitcount: u8,
 }
 
-// decoder state. D is the Huffman decoder type
+// explode state. D is the Huffman decoder type
 #[derive(Debug)]
-enum DecoderState<D> {
+enum ExplodeState<D> {
     Start,
     Length { decoder: D },
     LengthExtra { symbol: usize },
@@ -52,39 +52,39 @@ enum DecoderState<D> {
 
 // a buffer you can feed input into
 #[derive(Debug)]
-pub struct DecoderBuffer<'a> {
-    parent: &'a mut Decoder,
+pub struct ExplodeBuffer<'a> {
+    parent: &'a mut Explode,
     buf: &'a mut [u8],
     pos: usize,
 }
 
-impl DecoderInputState {
+impl ExplodeInputState {
     fn feed(&mut self, value: u8) {
-        if let DecoderInputState::Waiting = self {
-            *self = DecoderInputState::Available(value);
+        if let ExplodeInputState::Waiting = self {
+            *self = ExplodeInputState::Available(value);
         }
     }
 
     fn take(&mut self) -> Result<u8> {
         match self {
-            DecoderInputState::Available(value) => {
+            ExplodeInputState::Available(value) => {
                 let v = *value;
-                *self = DecoderInputState::Taken;
+                *self = ExplodeInputState::Taken;
                 Ok(v)
             }
-            DecoderInputState::Taken => {
-                *self = DecoderInputState::Waiting;
+            ExplodeInputState::Taken => {
+                *self = ExplodeInputState::Waiting;
                 println!("need more input");
                 Err(Error::IncompleteInput)
             }
-            DecoderInputState::Waiting => {
+            ExplodeInputState::Waiting => {
                 panic!("double take");
             }
         }
     }
 }
 
-impl DecoderInput {
+impl ExplodeInput {
     // read n bits
     fn bits(&mut self, n: u8) -> Result<u32> {
         while self.bitcount < n {
@@ -101,10 +101,7 @@ impl DecoderInput {
     }
 
     // decode using a table
-    fn decode(
-        &mut self,
-        d: &mut HuffmanDecoder<&'static [u8]>,
-    ) -> Result<u8> {
+    fn decode(&mut self, d: &mut Decoder<&'static [u8]>) -> Result<u8> {
         loop {
             // codes in this format are inverted from canonical
             let bit = self.bits(1)? != 1;
@@ -119,7 +116,7 @@ impl DecoderInput {
     }
 }
 
-impl<'a> DecoderBuffer<'a> {
+impl<'a> ExplodeBuffer<'a> {
     pub fn feed(&mut self, input: u8) -> Result<()> {
         // lengths are funny -- base val + extra bits
         static LEN_BASE: &[usize] =
@@ -159,9 +156,9 @@ impl<'a> DecoderBuffer<'a> {
         // decode literals and length/distance pairs
         // state machine rules:
         // each state may only call bits() once
-        // and decode() must store the HuffmanDecoder in the state
+        // and decode() must store the HuffmanExplode in the state
         loop {
-            use DecoderState::*;
+            use ExplodeState::*;
             println!("{:?}", self.parent.state);
             match self.parent.state {
                 Start => {
@@ -290,14 +287,14 @@ impl<'a> DecoderBuffer<'a> {
     }
 }
 
-impl Decoder {
+impl Explode {
     pub fn new() -> Self {
-        Decoder {
-            state: DecoderState::Start,
+        Explode {
+            state: ExplodeState::Start,
             lit: None,
             dict: None,
-            input: DecoderInput {
-                next: DecoderInputState::Waiting,
+            input: ExplodeInput {
+                next: ExplodeInputState::Waiting,
                 bitbuf: 0,
                 bitcount: 0,
             },
@@ -305,11 +302,11 @@ impl Decoder {
         }
     }
 
-    pub fn decode_into<'a>(
+    pub fn with_buffer<'a>(
         &'a mut self,
         buf: &'a mut [u8],
-    ) -> DecoderBuffer<'a> {
-        DecoderBuffer {
+    ) -> ExplodeBuffer<'a> {
+        ExplodeBuffer {
             parent: self,
             buf,
             pos: 0,
@@ -317,12 +314,12 @@ impl Decoder {
     }
 }
 
-pub fn decode_with_buffer(data: &[u8], buf: &mut [u8]) -> Result<Vec<u8>> {
-    let mut dec = Decoder::new();
+pub fn explode_with_buffer(data: &[u8], buf: &mut [u8]) -> Result<Vec<u8>> {
+    let mut dec = Explode::new();
     let mut i = 0;
     let mut out = Vec::with_capacity(buf.len());
     loop {
-        let mut decbuf = dec.decode_into(buf);
+        let mut decbuf = dec.with_buffer(buf);
         while i < data.len() {
             match decbuf.feed(data[i]) {
                 Ok(()) => {
@@ -332,7 +329,7 @@ pub fn decode_with_buffer(data: &[u8], buf: &mut [u8]) -> Result<Vec<u8>> {
                         return Ok(out);
                     }
                     out.extend_from_slice(decompressed);
-                    decbuf = dec.decode_into(buf);
+                    decbuf = dec.with_buffer(buf);
                 }
 
                 Err(Error::IncompleteInput) => {
@@ -349,29 +346,29 @@ pub fn decode_with_buffer(data: &[u8], buf: &mut [u8]) -> Result<Vec<u8>> {
     }
 }
 
-pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
+pub fn explode(data: &[u8]) -> Result<Vec<u8>> {
     let mut buf = [0; 4096];
-    decode_with_buffer(data, &mut buf)
+    explode_with_buffer(data, &mut buf)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{decode, decode_with_buffer};
+    use super::{explode, explode_with_buffer};
     use crate::examples::EXAMPLES;
 
     #[test]
-    fn decode_simple() {
+    fn explode_simple() {
         for (encoded, decoded) in EXAMPLES {
-            let ours = decode(encoded).unwrap();
+            let ours = explode(encoded).unwrap();
             assert_eq!(*decoded, &ours[..]);
         }
     }
 
     #[test]
-    fn decode_small() {
+    fn explode_small() {
         let mut buf = [0; 1];
         for (encoded, decoded) in EXAMPLES {
-            let ours = decode_with_buffer(encoded, &mut buf).unwrap();
+            let ours = explode_with_buffer(encoded, &mut buf).unwrap();
             assert_eq!(*decoded, &ours[..]);
         }
     }

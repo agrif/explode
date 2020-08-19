@@ -2,10 +2,12 @@
 // https://github.com/madler/zlib/tree/master/contrib/blast
 
 mod codes;
-mod decoder;
 mod error;
 mod examples;
+mod explode;
 mod tables;
 
-pub use decoder::{decode, decode_with_buffer, Decoder};
+pub use self::explode::{
+    explode, explode_with_buffer, Explode, ExplodeBuffer,
+};
 pub use error::{Error, Result};
