@@ -24,7 +24,7 @@ pub enum DecodeResult {
     Ok(u8),
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 impl CanonicalHuffman<Vec<u8>> {
     // create from a list of packed bits 0xHL
     // where H + 1 is a repeat count, and L is a symbol length
