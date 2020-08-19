@@ -24,6 +24,7 @@ pub enum DecodeResult {
     Ok(u8),
 }
 
+#[allow(dead_code)]
 impl CanonicalHuffman<Vec<u8>> {
     // create from a list of packed bits 0xHL
     // where H + 1 is a repeat count, and L is a symbol length
@@ -126,21 +127,6 @@ where
             first: 0,
         }
     }
-
-    pub fn decode<'a, I>(&self, bits: I) -> Option<u8>
-    where
-        I: IntoIterator<Item = &'a bool>,
-    {
-        let mut d = self.decoder();
-        for b in bits {
-            match d.feed(*b) {
-                DecodeResult::Incomplete => continue,
-                DecodeResult::Invalid => return None,
-                DecodeResult::Ok(c) => return Some(c),
-            }
-        }
-        None
-    }
 }
 
 impl<'a, T> Decoder<'a, T>
@@ -177,6 +163,26 @@ mod tests {
     use super::CanonicalHuffman;
     use super::DecodeResult;
 
+    // helper function to decode an iterator
+    fn decodeiter<'a, T, I>(
+        table: &CanonicalHuffman<T>,
+        bits: I,
+    ) -> Option<u8>
+    where
+        T: std::convert::AsRef<[u8]>,
+        I: IntoIterator<Item = &'a bool>,
+    {
+        let mut d = table.decoder();
+        for b in bits {
+            match d.feed(*b) {
+                DecodeResult::Incomplete => continue,
+                DecodeResult::Invalid => return None,
+                DecodeResult::Ok(c) => return Some(c),
+            }
+        }
+        None
+    }
+
     #[test]
     fn constructors() {
         // A = 10
@@ -210,10 +216,10 @@ mod tests {
         // C = 110
         // D = 111
         let a = CanonicalHuffman::new_from_lengths(&[2, 1, 3, 3]).unwrap();
-        assert_eq!(a.decode(&[true, false]), Some(0));
-        assert_eq!(a.decode(&[false]), Some(1));
-        assert_eq!(a.decode(&[true, true, false]), Some(2));
-        assert_eq!(a.decode(&[true, true, true]), Some(3));
+        assert_eq!(decodeiter(&a, &[true, false]), Some(0));
+        assert_eq!(decodeiter(&a, &[false]), Some(1));
+        assert_eq!(decodeiter(&a, &[true, true, false]), Some(2));
+        assert_eq!(decodeiter(&a, &[true, true, true]), Some(3));
     }
 
     #[test]
@@ -221,10 +227,10 @@ mod tests {
         // A = 0
         // B = 100
         let a = CanonicalHuffman::new_from_lengths(&[1, 3]).unwrap();
-        assert_eq!(a.decode(&[false]), Some(0));
-        assert_eq!(a.decode(&[true, false, false]), Some(1));
-        assert_eq!(a.decode(&[true, true, true]), None);
-        assert_eq!(a.decode(&[true, true]), None);
+        assert_eq!(decodeiter(&a, &[false]), Some(0));
+        assert_eq!(decodeiter(&a, &[true, false, false]), Some(1));
+        assert_eq!(decodeiter(&a, &[true, true, true]), None);
+        assert_eq!(decodeiter(&a, &[true, true]), None);
 
         let mut d = a.decoder();
         assert_eq!(d.feed(true), DecodeResult::Incomplete);
@@ -245,8 +251,8 @@ mod tests {
         // C = 1
         let a = CanonicalHuffman::new_from_lengths(&[0, 1, 1]).unwrap();
 
-        assert_eq!(a.decode(&[false]), Some(1));
-        assert_eq!(a.decode(&[true]), Some(2));
+        assert_eq!(decodeiter(&a, &[false]), Some(1));
+        assert_eq!(decodeiter(&a, &[true]), Some(2));
     }
 
     #[test]
