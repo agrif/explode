@@ -2,7 +2,6 @@
 // T can be either &[u8] or Vec<u8>
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CanonicalHuffman<T> {
-    max_len: usize,
     counts: T,
     symbols: T,
 }
@@ -57,7 +56,6 @@ impl CanonicalHuffman<Vec<u8>> {
         if counts[0] as usize == lengths.len() {
             // empty table
             return Some(CanonicalHuffman {
-                max_len,
                 counts,
                 symbols: vec![],
             });
@@ -94,18 +92,13 @@ impl CanonicalHuffman<Vec<u8>> {
             }
         }
 
-        Some(CanonicalHuffman {
-            max_len,
-            counts,
-            symbols,
-        })
+        Some(CanonicalHuffman { counts, symbols })
     }
 
     // turn a Vec-based table into a slice-based one
     // used mostly for comparison
     pub fn as_ref(&self) -> CanonicalHuffman<&[u8]> {
         CanonicalHuffman {
-            max_len: self.max_len,
             counts: &self.counts,
             symbols: &self.symbols,
         }
@@ -116,17 +109,13 @@ impl<'a> CanonicalHuffman<&'a [u8]> {
     // create a code from an array of code counts per length, and symbols
     // unsafe -- does not check that counts.iter().sum() == symbols.len()
     pub const unsafe fn new(counts: &'a [u8], symbols: &'a [u8]) -> Self {
-        CanonicalHuffman {
-            max_len: counts.len(),
-            counts,
-            symbols,
-        }
+        CanonicalHuffman { counts, symbols }
     }
 }
 
 impl<T> CanonicalHuffman<T>
 where
-    T: std::ops::Index<usize, Output = u8>,
+    T: std::convert::AsRef<[u8]>,
 {
     pub fn decoder(&self) -> Decoder<T> {
         Decoder {
@@ -156,30 +145,24 @@ where
 
 impl<'a, T> Decoder<'a, T>
 where
-    T: std::ops::Index<usize, Output = u8>,
+    T: std::convert::AsRef<[u8]>,
 {
     pub fn feed(&mut self, bit: bool) -> DecodeResult {
         self.code |= bit as u32;
         self.bits += 1;
 
-        if self.bits >= self.codebook.max_len {
-            // this can happen with an empty table
+        if self.bits >= self.codebook.counts.as_ref().len() {
+            // this is too long, it cannot be valid
             return DecodeResult::Invalid;
         }
 
-        let count = self.codebook.counts[self.bits] as u32;
+        let count = self.codebook.counts.as_ref()[self.bits] as u32;
         if self.code < self.first + count {
             // this is a valid symbol
             let i = self.index + (self.code - self.first) as usize;
-            DecodeResult::Ok(self.codebook.symbols[i])
-        } else if self.code > self.first + count {
-            // this is an invalid symbol
-            DecodeResult::Invalid
-        } else if self.bits + 1 >= self.codebook.max_len {
-            // this is also invalid
-            DecodeResult::Invalid
+            DecodeResult::Ok(self.codebook.symbols.as_ref()[i])
         } else {
-            // this is an incomplete symbol
+            // this is an incomplete or eventually invalid symbol
             self.index += count as usize;
             self.first += count;
             self.first <<= 1;
@@ -245,11 +228,14 @@ mod tests {
 
         let mut d = a.decoder();
         assert_eq!(d.feed(true), DecodeResult::Incomplete);
+        assert_eq!(d.feed(true), DecodeResult::Incomplete);
+        assert_eq!(d.feed(true), DecodeResult::Incomplete);
         assert_eq!(d.feed(true), DecodeResult::Invalid);
 
         let mut d = a.decoder();
         assert_eq!(d.feed(true), DecodeResult::Incomplete);
         assert_eq!(d.feed(false), DecodeResult::Incomplete);
+        assert_eq!(d.feed(true), DecodeResult::Incomplete);
         assert_eq!(d.feed(true), DecodeResult::Invalid);
     }
 
