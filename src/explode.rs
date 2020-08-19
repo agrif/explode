@@ -74,7 +74,6 @@ impl ExplodeInputState {
             }
             ExplodeInputState::Taken => {
                 *self = ExplodeInputState::Waiting;
-                println!("need more input");
                 Err(Error::IncompleteInput)
             }
             ExplodeInputState::Waiting => {
@@ -96,7 +95,6 @@ impl ExplodeInput {
         self.bitbuf >>= n;
         self.bitcount -= n;
 
-        println!("read bits {:?}", val & ((1 << n) - 1));
         Ok(val & ((1 << n) - 1))
     }
 
@@ -130,7 +128,6 @@ impl<'a> ExplodeBuffer<'a> {
         let lit = if let Some(lit) = self.parent.lit {
             lit
         } else {
-            println!("read lit");
             let lit = self.parent.input.bits(8)? as u8;
             if lit > 1 {
                 return Err(Error::BadLiteralFlag);
@@ -144,7 +141,6 @@ impl<'a> ExplodeBuffer<'a> {
         let dict = if let Some(dict) = self.parent.dict {
             dict
         } else {
-            println!("read dict");
             let dict = self.parent.input.bits(8)? as u8;
             if dict < 4 || dict > 6 {
                 return Err(Error::BadDictionary);
@@ -159,7 +155,6 @@ impl<'a> ExplodeBuffer<'a> {
         // and decode() must store the HuffmanExplode in the state
         loop {
             use ExplodeState::*;
-            println!("{:?}", self.parent.state);
             match self.parent.state {
                 Start => {
                     if self.parent.input.bits(1)? > 0 {
@@ -235,7 +230,6 @@ impl<'a> ExplodeBuffer<'a> {
                         }
 
                         let value = self.parent.window[*idx];
-                        println!("value {:?}", value);
                         self.parent.window.push_back(value);
                         self.buf[self.pos] = value;
                         self.pos += 1;
@@ -255,7 +249,6 @@ impl<'a> ExplodeBuffer<'a> {
                         return Ok(());
                     }
                     let value = self.parent.input.bits(8)? as u8;
-                    println!("value {:?}", value);
                     self.parent.window.push_back(value);
                     self.buf[self.pos] = value;
                     self.pos += 1;
@@ -268,7 +261,6 @@ impl<'a> ExplodeBuffer<'a> {
                         return Ok(());
                     }
                     let value = self.parent.input.decode(decoder)?;
-                    println!("value {:?}", value);
                     self.parent.window.push_back(value);
                     self.buf[self.pos] = value;
                     self.pos += 1;
