@@ -278,8 +278,16 @@ impl<'a> ExplodeBuffer<'a> {
         &self.buf[..self.pos]
     }
 
+    pub fn len(&self) -> usize {
+        self.pos
+    }
+
     pub fn reset(&mut self) {
         self.pos = 0;
+    }
+
+    pub fn done(&self) -> bool {
+        self.parent.done()
     }
 }
 
@@ -308,6 +316,14 @@ impl Explode {
             pos: 0,
         }
     }
+
+    pub fn done(&self) -> bool {
+        if let ExplodeState::End = self.state {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 pub fn explode_with_buffer(data: &[u8], buf: &mut [u8]) -> Result<Vec<u8>> {
@@ -320,11 +336,11 @@ pub fn explode_with_buffer(data: &[u8], buf: &mut [u8]) -> Result<Vec<u8>> {
             match decbuf.feed(data[i]) {
                 Ok(()) => {
                     let decompressed = decbuf.get();
-                    if decompressed.len() == 0 {
-                        // done
+                    out.extend_from_slice(decompressed);
+                    if decbuf.done() {
+                        // we're done
                         return Ok(out);
                     }
-                    out.extend_from_slice(decompressed);
                     decbuf.reset();
                 }
 
