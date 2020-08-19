@@ -1,11 +1,11 @@
 // based on zlib/contrib/blast/blast.c by Mark Adler
 // https://github.com/madler/zlib/tree/master/contrib/blast
 
-mod error;
-pub use error::{Error, Result};
-
 mod codes;
+mod decoder;
+mod error;
+mod examples;
 mod tables;
 
-mod decoder;
-pub use decoder::Decoder;
+pub use decoder::{decode, decode_with_buffer, Decoder};
+pub use error::{Error, Result};
