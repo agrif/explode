@@ -5,3 +5,4 @@ authors = ["Aaron Griffith <aargri@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+arraydeque = "0.4"

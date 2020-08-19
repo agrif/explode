@@ -1,6 +1,8 @@
 // based on zlib/contrib/blast/blast.c by Mark Adler
 // https://github.com/madler/zlib/tree/master/contrib/blast
 
+use arraydeque::ArrayDeque;
+
 mod error;
 pub use error::{Error, Result};
 
@@ -12,9 +14,12 @@ mod tables;
 pub struct Decoder<R> {
     input: R,
 
-    // store unused bits
+    // store unused bits read in
     bitbuf: u8,
     bitcount: u8,
+
+    // store our window (which cannot exceed 4096 bytes)
+    window: ArrayDeque<[u8; 4096], arraydeque::behavior::Wrapping>,
 }
 
 impl<R> Decoder<R>
@@ -26,6 +31,7 @@ where
             input,
             bitbuf: 0,
             bitcount: 0,
+            window: ArrayDeque::new(),
         }
     }
 
@@ -71,11 +77,11 @@ where
         }
     }
 
-    pub fn decomp(&mut self) -> Result<()> {
+    pub fn decomp(&mut self) -> Result<Vec<u8>> {
         // lengths are funny -- base val + extra bits
-        static len_base: &[usize] =
+        static LEN_BASE: &[usize] =
             &[3, 2, 4, 5, 6, 7, 8, 9, 10, 12, 16, 24, 40, 72, 136, 264];
-        static len_extra: &[u8] =
+        static LEN_EXTRA: &[u8] =
             &[0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8];
 
         // first byte is 0 if literals are uncoded, or 1 if coded
@@ -92,34 +98,52 @@ where
         }
 
         // decode literals and length/distance pairs
+        let mut out = vec![];
         loop {
             if self.bits(1)? > 0 {
                 // this is a length/distance pair
                 // length first
                 let symbol = self.decode(&tables::LENGTH)? as usize;
                 let len =
-                    len_base[symbol] + self.bits(len_extra[symbol])? as usize;
+                    LEN_BASE[symbol] + self.bits(LEN_EXTRA[symbol])? as usize;
                 if len == 519 {
                     // end code
-                    return Ok(());
+                    return Ok(out);
                 }
 
                 // now distance
                 let extra_bits = if len == 2 { 2 } else { dict };
                 let mut dist =
                     (self.decode(&tables::DISTANCE)? as usize) << extra_bits;
-                dist += self.bits(extra_bits)? as usize;
+                dist += self.bits(extra_bits)? as usize + 1;
 
-                println!("length {:?} distance {:?}", len, dist);
+                if dist > self.window.len() {
+                    // too far back
+                    return Err(Error::BadDistance);
+                }
+
+                // perform a copy
+                let mut idx = self.window.len() - dist;
+                for _ in 0..len {
+                    let value = self.window[idx];
+                    idx += 1;
+                    if idx > self.window.len() {
+                        idx -= self.window.len();
+                    }
+
+                    self.window.push_back(value);
+                    out.push(value);
+                }
             } else {
                 // this is a literal
-                let symbol = if lit > 0 {
+                let value = if lit > 0 {
                     self.decode(&tables::LITERAL)?
                 } else {
                     self.bits(8)? as u8
                 };
 
-                println!("symbol {:?}", symbol);
+                self.window.push_back(value);
+                out.push(value);
             }
         }
     }
@@ -128,12 +152,18 @@ where
 #[cfg(test)]
 mod tests {
     #[test]
-    fn basic() {
+    fn aiaiaiaiaiaia() {
         let c = std::io::Cursor::new([
             0x00, 0x04, 0x82, 0x24, 0x25, 0x8f, 0x80, 0x7f,
         ]);
         let mut d = super::Decoder::new(c);
-        d.decomp().unwrap();
-        panic!();
+        let result = d.decomp().unwrap();
+        assert_eq!(
+            result,
+            vec![
+                0x41, 0x49, 0x41, 0x49, 0x41, 0x49, 0x41, 0x49, 0x41, 0x49,
+                0x41, 0x49, 0x41
+            ]
+        );
     }
 }
