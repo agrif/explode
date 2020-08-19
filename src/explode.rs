@@ -274,8 +274,12 @@ impl<'a> ExplodeBuffer<'a> {
         }
     }
 
-    pub fn get(self) -> &'a mut [u8] {
-        &mut self.buf[..self.pos]
+    pub fn get(&self) -> &[u8] {
+        &self.buf[..self.pos]
+    }
+
+    pub fn reset(&mut self) {
+        self.pos = 0;
     }
 }
 
@@ -321,7 +325,7 @@ pub fn explode_with_buffer(data: &[u8], buf: &mut [u8]) -> Result<Vec<u8>> {
                         return Ok(out);
                     }
                     out.extend_from_slice(decompressed);
-                    decbuf = dec.with_buffer(buf);
+                    decbuf.reset();
                 }
 
                 Err(Error::IncompleteInput) => {
