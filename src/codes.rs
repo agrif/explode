@@ -240,9 +240,25 @@ mod tests {
     }
 
     #[test]
+    fn incomplete() {
+        // B = 0
+        // C = 1
+        let a = CanonicalHuffman::new_from_lengths(&[0, 1, 1]).unwrap();
+
+        assert_eq!(a.decode(&[false]), Some(1));
+        assert_eq!(a.decode(&[true]), Some(2));
+    }
+
+    #[test]
     fn empty() {
         // all codes are invalid in an empty table
         let a = CanonicalHuffman::new_from_lengths(&[]).unwrap();
+
+        assert_eq!(a.decoder().feed(false), DecodeResult::Invalid);
+        assert_eq!(a.decoder().feed(true), DecodeResult::Invalid);
+
+        // if all symbols have 0 length, table is empty
+        let a = CanonicalHuffman::new_from_lengths(&[0, 0]).unwrap();
 
         assert_eq!(a.decoder().feed(false), DecodeResult::Invalid);
         assert_eq!(a.decoder().feed(true), DecodeResult::Invalid);
