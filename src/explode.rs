@@ -236,7 +236,7 @@ impl<'a> ExplodeBuffer<'a> {
 
                         *len -= 1;
                         *idx += 1;
-                        if *idx > self.parent.window.len() {
+                        if *idx >= self.parent.window.len() {
                             *idx -= self.parent.window.len();
                         }
                     }
