@@ -1,5 +1,9 @@
 # explode
 
+[![build status](https://travis-ci.org/agrif/explode.svg?branch=master)](https://travis-ci.org/agrif/explode)
+[![crates.io](https://img.shields.io/crates/v/explode.svg)](https://crates.io/crates/explode)
+[![docs.rs](https://docs.rs/explode/badge.svg)](https://docs.rs/explode)
+
 A decompression implementation for the *implode* algorithm from the
 PKWARE Data Compression Library.
 
