@@ -2,6 +2,28 @@ use crate::{Error, Explode};
 
 use std::io::{Error as IOError, ErrorKind, Read, Result};
 
+/// A [`Read`][Read] wrapper that decompresses.
+///
+///  [Read]: https://doc.rust-lang.org/std/io/trait.Read.html
+///
+/// If you have a [`File`][File] or any other type that implements
+/// [`Read`][Read], you can use this wrapper to decompress it as you
+/// read it.
+///
+///  [File]: https://doc.rust-lang.org/std/io/struct.File.html
+///
+/// ```
+/// # fn main() -> explode::Result<()> {
+/// # let bytes = vec![0x00, 0x04, 0x82, 0x24, 0x25, 0x8f, 0x80, 0x7f];
+/// # let some_file = std::io::Cursor::new(&bytes);
+/// use std::io::Read;
+/// let mut reader = explode::ExplodeReader::new(some_file);
+/// let mut decompressed = vec![];
+/// reader.read_to_end(&mut decompressed)?;
+/// // or other functions from Read
+/// # assert_eq!(decompressed, "AIAIAIAIAIAIA".as_bytes());
+/// # Ok(()) }
+/// ```
 pub struct ExplodeReader<R> {
     inner: R,
     dec: Explode,
@@ -12,6 +34,7 @@ impl<R> ExplodeReader<R>
 where
     R: Read,
 {
+    /// Create a new decompression wrapper around `inner`.
     pub fn new(inner: R) -> Self {
         ExplodeReader {
             inner,

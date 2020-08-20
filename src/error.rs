@@ -1,12 +1,24 @@
+/// Error type produced by decompression.
+///
+/// Of these, `IncompleteInput` is special as in some circumstances it
+/// is possible to recover by providing further input. This is
+/// documented wherever it is possible.
 #[derive(Debug)]
 pub enum Error {
+    /// A normal IO error.
     IO(std::io::Error),
+    /// The input is incomplete. Decompression may still succeed if
+    /// you provide more input.
     IncompleteInput,
+    /// The literal flag in the header is invalid.
     BadLiteralFlag,
+    /// The dictionary size in the header is invalid.
     BadDictionary,
+    /// A repeat command tried to read past the beginning of the buffer.
     BadDistance,
 }
 
+/// Result type for decompression functions.
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl std::convert::From<std::io::Error> for Error {

@@ -3,6 +3,71 @@ use super::{tables, Error, Result};
 
 use arraydeque::ArrayDeque;
 
+/// Low-level decompression interface.
+///
+/// This provides low-level access to the decompression algorithm. If
+/// possible, prefer using [`explode`](fn.explode.html) or
+/// [`ExplodeReader`](struct.ExplodeReader.html) as they are simpler
+/// to use.
+///
+/// The usual control flow with this interface is to provide a buffer
+/// to decompress into with [`with_buffer`](#method.with_buffer), and
+/// then to feed the resulting
+/// [`ExplodeBuffer`](struct.ExplodeBuffer.html) handle with bytes
+/// until it returns `Ok`. Then you can retrieve the filled portion of
+/// the buffer containing your decompressed data.
+///
+/// ```
+/// # fn main() -> explode::Result<()> {
+/// use explode::{Error, Explode};
+///
+/// // some test data to decompress
+/// let input = vec![0x00, 0x04, 0x82, 0x24, 0x25, 0x8f, 0x80, 0x7f];
+/// // which byte we are currently feeding in
+/// let mut i = 0;
+/// // our output buffer
+/// let mut outbuf: [u8; 256] = [0; 256];
+///
+/// // decompress
+/// let mut ex = explode::Explode::new();
+/// let mut exbuf = ex.with_buffer(&mut outbuf);
+/// // loop while we have more input, and decompression is not done
+/// while i < input.len() && !exbuf.done() {
+///     // note we feed exbuf the *same byte* every loop, until it requests
+///     // more input with Error::IncompleteInput.
+///     match exbuf.feed(input[i]) {
+///         Ok(()) => {
+///             // buffer is full. use exbuf.get() to get the filled portion
+///             println!("{:?}", exbuf.get());
+///             // compression may not be finished, so reset and loop again
+///             exbuf.reset();
+///         }
+///
+///         Err(Error::IncompleteInput) => {
+///             // advance our input cursor
+///             i += 1;
+///         }
+///
+///         Err(e) => {
+///             // any other error is a sign the input is invalid
+///             panic!("{:?}", e);
+///         }
+///     }
+/// }
+///
+/// if !exbuf.done() {
+///     // we ran out of input, but decompression isn't done!
+///     panic!("unexpected end of input");
+/// }
+/// # Ok(()) }
+/// ```
+///
+/// Be careful that the input byte you provide to
+/// [`ExplodeBuffer::feed`](struct.ExplodeBuffer.html#method.feed)
+/// only changes when requested by
+/// [`Error::IncompleteInput`](enum.Error.html#variant.IncompleteInput). If
+/// the input changes at any other time, decompression will fail or
+/// produce incorrect output.
 #[derive(Debug)]
 pub struct Explode {
     state: ExplodeState<Decoder<'static, &'static [u8]>>,
@@ -50,7 +115,14 @@ enum ExplodeState<D> {
     End,
 }
 
-// a buffer you can feed input into
+/// A handle to feed input to the decompressor.
+///
+/// This is the primary interface for low-level decompression. You can
+/// get an instance of this by providing an output buffer to
+/// [`Explode::with_buffer`](struct.Explode.html#method.with_buffer).
+///
+/// For a high-level example of how to use this interface, see
+/// [`Explode`](struct.Explode.html).
 #[derive(Debug)]
 pub struct ExplodeBuffer<'a> {
     parent: &'a mut Explode,
@@ -115,6 +187,19 @@ impl ExplodeInput {
 }
 
 impl<'a> ExplodeBuffer<'a> {
+    /// Feed in a byte `input` to decompress.
+    ///
+    /// Signals a full output buffer by returning `Ok(())`. You can
+    /// then get a reference to the full buffer with
+    /// [`get`](#method.get), and reset the output buffer to empty
+    /// with [`reset`](#method.reset).
+    ///
+    /// Note that you should feed in the same byte *repeatedly* to
+    /// this function, until it signals it is ready for more input by
+    /// returning
+    /// [`Error::IncompleteInput`](enum.Error.html#variant.IncompleteInput).
+    /// Doing anything else will result in a decompression failure or
+    /// bad output.
     pub fn feed(&mut self, input: u8) -> Result<()> {
         // lengths are funny -- base val + extra bits
         static LEN_BASE: &[usize] =
@@ -274,24 +359,37 @@ impl<'a> ExplodeBuffer<'a> {
         }
     }
 
+    /// Get a reference to the filled portion of the output buffer.
+    ///
+    /// This is usually called after [`feed`](#method.feed) returns `Ok(())`.
     pub fn get(&self) -> &[u8] {
         &self.buf[..self.pos]
     }
 
+    /// Return the amount of output produced so far.
     pub fn len(&self) -> usize {
         self.pos
     }
 
+    /// Reset the output buffer to empty.
+    ///
+    /// Note that this does *not* reset the entire decompressor state.
     pub fn reset(&mut self) {
         self.pos = 0;
     }
 
+    /// Returns true if decompression is finished.
+    ///
+    /// This does the same thing as
+    /// [`Explode::done`](struct.Explode.html#method.done) but is
+    /// usable while a `ExplodeBuffer` is still in scope.
     pub fn done(&self) -> bool {
         self.parent.done()
     }
 }
 
 impl Explode {
+    /// Create a new Explode decompression state.
     pub fn new() -> Self {
         Explode {
             state: ExplodeState::Start,
@@ -306,6 +404,11 @@ impl Explode {
         }
     }
 
+    /// Provide a buffer to decompress into.
+    ///
+    /// This returns a [`ExplodeBuffer`](struct.ExplodeBuffer.html)
+    /// handle that is used for feeding input to decompress and other
+    /// operations.
     pub fn with_buffer<'a>(
         &'a mut self,
         buf: &'a mut [u8],
@@ -317,6 +420,13 @@ impl Explode {
         }
     }
 
+    /// Returns true if decompression is finished.
+    ///
+    /// If this function can't be used because a
+    /// [`ExplodeBuffer`](struct.ExplodeBuffer.html) is currently
+    /// borrowing this object mutably, you can use
+    /// [`ExplodeBuffer::done`](struct.ExplodeBuffer.html#method.done)
+    /// instead.
     pub fn done(&self) -> bool {
         if let ExplodeState::End = self.state {
             true
@@ -326,6 +436,21 @@ impl Explode {
     }
 }
 
+/// Decompress a block of `data` in memory, using the given auxiliary
+/// buffer `buf`.
+///
+/// This gives you control over the size of the internal buffer
+/// used. If you do not need that control, use
+/// [`explode`](fn.explode.html) instead.
+///
+/// ```
+/// # fn main() -> explode::Result<()> {
+/// let mut buf: [u8; 1] = [0; 1];
+/// let bytes = vec![0x00, 0x04, 0x82, 0x24, 0x25, 0x8f, 0x80, 0x7f];
+/// let result = explode::explode_with_buffer(&bytes, &mut buf)?;
+/// assert_eq!(result, "AIAIAIAIAIAIA".as_bytes());
+/// # Ok(()) }
+/// ```
 pub fn explode_with_buffer(data: &[u8], buf: &mut [u8]) -> Result<Vec<u8>> {
     let mut dec = Explode::new();
     let mut i = 0;
@@ -358,6 +483,19 @@ pub fn explode_with_buffer(data: &[u8], buf: &mut [u8]) -> Result<Vec<u8>> {
     }
 }
 
+/// Decompress a block of `data` in memory.
+///
+/// ```
+/// # fn main() -> explode::Result<()> {
+/// let bytes = vec![0x00, 0x04, 0x82, 0x24, 0x25, 0x8f, 0x80, 0x7f];
+/// let result = explode::explode(&bytes)?;
+/// assert_eq!(result, "AIAIAIAIAIAIA".as_bytes());
+/// # Ok(()) }
+/// ```
+///
+/// This function will internally decompress the given memory in
+/// blocks of 4096 bytes. If you wish to use a different block size,
+/// see [`explode_with_buffer`](fn.explode_with_buffer.html).
 pub fn explode(data: &[u8]) -> Result<Vec<u8>> {
     let mut buf = [0; 4096];
     explode_with_buffer(data, &mut buf)

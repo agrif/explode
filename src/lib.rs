@@ -19,19 +19,21 @@
 //! # Ok(()) }
 //! ```
 //!
-//! To decompress a file or other type that implements [`Read`][Read], use
-//! [`ExplodeReader`](struct.ExplodeReader.html).
+//! To decompress a [`File`][File] or other type that implements
+//! [`Read`][Read], use [`ExplodeReader`](struct.ExplodeReader.html).
 //!
 //!  [Read]: https://doc.rust-lang.org/std/io/trait.Read.html
+//!  [File]: https://doc.rust-lang.org/std/io/struct.File.html
 //!
 //! ```
 //! # fn main() -> explode::Result<()> {
 //! # let bytes = vec![0x00, 0x04, 0x82, 0x24, 0x25, 0x8f, 0x80, 0x7f];
-//! # let file = std::io::Cursor::new(&bytes);
+//! # let some_file = std::io::Cursor::new(&bytes);
 //! use std::io::Read;
-//! let mut reader = explode::ExplodeReader::new(file);
+//! let mut reader = explode::ExplodeReader::new(some_file);
 //! let mut decompressed = vec![];
 //! reader.read_to_end(&mut decompressed)?;
+//! // or other functions from Read
 //! # assert_eq!(decompressed, "AIAIAIAIAIAIA".as_bytes());
 //! # Ok(()) }
 //! ```
