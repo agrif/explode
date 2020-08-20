@@ -1,8 +1,17 @@
 [package]
 name = "explode"
 version = "0.1.0"
-authors = ["Aaron Griffith <aargri@gmail.com>"]
 edition = "2018"
+
+description = "A decompression implementation for the implode algorithm from the PKWARE Data Compression Library."
+authors = ["Aaron Griffith <aargri@gmail.com>"]
+repository = "https://github.com/agrif/explode"
+documentation = "https://docs.rs/explode"
+readme = "README.md"
+license = "MIT"
+
+keywords = ["pkware", "dcl", "explode", "blast", "implode"]
+categories = ["compression", "encoding"]
 
 [dependencies]
 arraydeque = "0.4"
