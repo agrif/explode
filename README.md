@@ -1,6 +1,6 @@
 # explode
 
-[![build status](https://travis-ci.org/agrif/explode.svg?branch=master)](https://travis-ci.org/agrif/explode)
+[![build status](https://api.travis-ci.com/agrif/explode.svg?branch=master)](https://travis-ci.com/github/agrif/explode)
 [![crates.io](https://img.shields.io/crates/v/explode.svg)](https://crates.io/crates/explode)
 [![docs.rs](https://docs.rs/explode/badge.svg)](https://docs.rs/explode)
 
