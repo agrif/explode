@@ -315,15 +315,14 @@ impl<'a> ExplodeBuffer<'a> {
                         }
 
                         let value = self.parent.window[*idx];
+                        *len -= 1;
+                        if !self.parent.window.is_full() {
+                            *idx += 1;
+                        }
+
                         self.parent.window.push_back(value);
                         self.buf[self.pos] = value;
                         self.pos += 1;
-
-                        *len -= 1;
-                        *idx += 1;
-                        if *idx >= self.parent.window.len() {
-                            *idx -= self.parent.window.len();
-                        }
                     }
                     self.parent.state = Start;
                 }
